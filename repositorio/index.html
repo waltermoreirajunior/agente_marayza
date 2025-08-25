@@ -27,398 +27,606 @@
     Se preferir usar arquivo externo, veja a versão chatbot.js abaixo e rode um servidor HTTP.
   -->
   <script type="text/babel">
-    // ChatBot embutido — usa React global (UMD) sem imports
-    const { useState, useEffect, useRef } = React;
+    import React, { useState, useEffect, useRef } from 'react';
+import { Send, Bot, User, Clock, Calendar, Phone, MapPin } from 'lucide-react';
 
-    const LEADS_API_URL = "http://localhost:4000/api/leads"; // ajuste caso contrário
+// ⚠️ SUBSTITUA PELA SUA URL DO GOOGLE APPS SCRIPT
+const SHEETS_WEBHOOK_URL = 'https://script.google.com/macros/s/SEU_SCRIPT_ID/exec';
 
-    function ChatBot() {
-      const [messages, setMessages] = useState([
-        {
-          id: 1,
-          text:
-            "Olá! Bem-vindo(a) à Marayza Pires Pilates e Fisioterapia! 😊\n\nPosso ajudar com informações sobre serviços, horários ou agendamento. Observação: valores são informados pela nossa equipe humana — posso anotar seus dados para que a recepção entre em contato?",
-          isBot: true,
-          timestamp: new Date()
-        }
-      ]);
-      const [inputText, setInputText] = useState("");
-      const [isTyping, setIsTyping] = useState(false);
-      const messagesEndRef = useRef(null);
+const CLINIC_INFO = {
+  nome: "Marayza Pires Pilates e Fisioterapia",
+  endereco: "Av Geraldo Emídio Carneiro, 1 - Centro, Ipameri - GO, 75780-000",
+  cidade: "Ipameri - GO",
+  telefone: "(64) 9233-4004",
+  whatsapp: "+55 64 99233-4004",
+  email: "dramarayzapiresribeiro@gmail.com",
+  horario: `Segunda & Quarta: 07:00 – 11:00 / 14:00 – 20:00
+Terça & Quinta: 06:00 – 10:00 / 14:00 – 20:00`,
+  coordenadas: "17°43'16.7\"S 48°09'40.0\"W"
+};
 
-      // Lead flow
-      const [leadFlow, setLeadFlow] = useState(false);
-      const [leadStep, setLeadStep] = useState(null);
-      const [collectedLead, setCollectedLead] = useState({
-        nome: "",
-        whatsapp: "",
-        servico: "",
-        periodo: ""
+const SERVICES = [
+  {
+    id: "fisioterapia-ortopedica",
+    nome: "Fisioterapia Ortopédica",
+    descricao: "Avaliação e reabilitação de lesões musculoesqueléticas: coluna, ombro, joelho, tornozelo e pós-operatório.",
+    indicacoes: ["dor lombar", "tendinite", "lesões esportivas", "pós-cirúrgico"],
+    formatos: ["sessão individual"],
+    duracaoMin: 50
+  },
+  {
+    id: "fisioterapia-pelvica-obstetrica",
+    nome: "Fisioterapia Pélvica e Obstétrica",
+    descricao: "Cuidado especializado para gestantes e disfunções do assoalho pélvico (incontinência, dor pélvica, preparo para parto e pós-parto).",
+    indicacoes: ["gestação", "pós-parto", "incontinência urinária", "dor pélvica"],
+    contraindicacoes: ["situações obstétricas de risco — sempre avaliar com médico"],
+    formatos: ["sessão individual"],
+    duracaoMin: 50
+  },
+  {
+    id: "laser-terapia",
+    nome: "Laser-terapia",
+    descricao: "Aplicação de laser terapêutico para analgesia, modulação inflamatória e cicatrização tecidual.",
+    indicacoes: ["tendinopatias", "entorses", "cicatrização de tecidos moles"],
+    contraindicacoes: ["área tumoral conhecida", "olhos", "gestação em abdome sem indicação"],
+    formatos: ["sessão avulsa", "pacote combinado com fisioterapia"],
+    duracaoMin: 20
+  },
+  {
+    id: "pilates-solo",
+    nome: "Pilates Solo",
+    descricao: "Método Pilates sem aparelhos, foco em controle motor, força e mobilidade.",
+    formatos: ["aulas em grupo (máx 6)", "personal"],
+    duracaoMin: 50
+  },
+  {
+    id: "pilates-tradicional",
+    nome: "Pilates Tradicional (Aparelhos)",
+    descricao: "Aulas com Reformer, Cadillac, Chair e acessórios, seguindo princípios clássicos.",
+    formatos: ["duplas", "trio", "personal"],
+    duracaoMin: 50
+  },
+  {
+    id: "pilates-acrobatico",
+    nome: "Pilates Acrobático",
+    descricao: "Combina princípios do Pilates com elementos acrobáticos de forma progressiva e segura.",
+    formatos: ["turmas pequenas", "personal"],
+    duracaoMin: 60
+  }
+];
+
+const FAQ = [
+  {
+    q: "Quais serviços vocês oferecem?",
+    a: "Atendemos Fisioterapia Ortopédica, Fisioterapia Pélvica e Obstétrica, Laser-terapia, Pilates Solo, Pilates Tradicional (aparelhos) e Pilates Acrobático."
+  },
+  {
+    q: "Como funcionam os agendamentos?",
+    a: "Agendamentos são feitos preferencialmente por WhatsApp. Nosso assistente pode coletar nome e telefone e a recepção confirma via WhatsApp."
+  },
+  {
+    q: "Vocês atendem convênio?",
+    a: "Trabalhamos principalmente particular com recibo para reembolso. Fale comigo que verifico seu caso."
+  },
+  {
+    q: "Onde ficam?",
+    a: `${CLINIC_INFO.endereco} — ${CLINIC_INFO.cidade}. Coordenadas: ${CLINIC_INFO.coordenadas}`
+  },
+  {
+    q: "Quais os horários?",
+    a: CLINIC_INFO.horario
+  },
+  {
+    q: "Primeira avaliação",
+    a: "A primeira consulta inclui avaliação completa e plano terapêutico. Dura aproximadamente 50 minutos."
+  }
+];
+
+const ChatBot = () => {
+  const [messages, setMessages] = useState([
+    {
+      id: 1,
+      text: `Olá! Bem-vindo(a) à Marayza Pires Pilates e Fisioterapia! 😊 
+      
+Somos especializados em fisioterapia e pilates em Ipameri-GO. Como posso ajudá-lo(a) hoje?`,
+      isBot: true,
+      timestamp: new Date()
+    }
+  ]);
+  const [inputText, setInputText] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const [leadCapture, setLeadCapture] = useState({
+    active: false,
+    step: 'nome',
+    data: {}
+  });
+  const messagesEndRef = useRef(null);
+
+  // Função para enviar dados para o Google Sheets
+  const sendToSheets = async (type, data) => {
+    try {
+      const response = await fetch(SHEETS_WEBHOOK_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ type, ...data })
       });
-      const [isSubmitting, setIsSubmitting] = useState(false);
+      console.log('Dados enviados para planilha:', { type, ...data });
+    } catch (error) {
+      console.error('Erro ao enviar para planilha:', error);
+    }
+  };
 
-      const services = {
-        "fisioterapia ortopédica": {
-          name: "Fisioterapia Ortopédica",
-          description:
-            "Tratamento especializado para lesões musculoesqueléticas, dores nas costas, articulações e reabilitação pós-cirúrgica.",
-          duration: "50 minutos",
-          price: "Consulte valores"
-        },
-        "fisioterapia pélvica": {
-          name: "Fisioterapia Pélvica e Obstétrica",
-          description:
-            "Especializada em saúde da mulher, preparação para o parto, pós-parto e disfunções do assoalho pélvico.",
-          duration: "50 minutos",
-          price: "Consulte valores"
-        },
-        "laser-terapia": {
-          name: "Laser-terapia",
-          description:
-            "Tratamento com laser para alívio da dor, cicatrização e regeneração de tecidos.",
-          duration: "30 minutos",
-          price: "Consulte valores"
-        },
-        "pilates solo": {
-          name: "Pilates Solo",
-          description:
-            "Exercícios de pilates no solo para fortalecimento, flexibilidade e consciência corporal.",
-          duration: "60 minutos",
-          price: "Consulte valores"
-        },
-        "pilates tradicional": {
-          name: "Pilates Tradicional",
-          description:
-            "Pilates com equipamentos tradicionais para reabilitação e condicionamento físico.",
-          duration: "50 minutos",
-          price: "Consulte valores"
-        },
-        "pilates acrobático": {
-          name: "Pilates Acrobático",
-          description:
-            "Modalidade avançada que combina pilates com movimentos acrobáticos suspensos.",
-          duration: "60 minutos",
-          price: "Consulte valores"
-        }
-      };
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
-      useEffect(() => {
-        scrollToBottom();
-      }, [messages]);
+  useEffect(scrollToBottom, [messages]);
 
-      const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      };
+  // Processar captura de lead
+  const processLeadCapture = (userMessage) => {
+    const currentStep = leadCapture.step;
+    const newData = { ...leadCapture.data };
 
-      const addBotMessage = (text) => {
-        setMessages((prev) => [
-          ...prev,
-          { id: prev.length + 1, text, isBot: true, timestamp: new Date() }
-        ]);
-      };
+    switch (currentStep) {
+      case 'nome':
+        newData.nome = userMessage;
+        setLeadCapture({ active: true, step: 'telefone', data: newData });
+        return `Prazer em conhecê-lo(a), ${userMessage}! 😊
 
-      const extractPhone = (text) => {
-        // extrai sequência numérica razoável (simples)
-        const m = text.replace(/\D+/g, "");
-        if (!m) return null;
-        // formatar com espaço para leitura (64 9xxxxxxxx)
-        return m;
-      };
+Para prosseguir com o agendamento, preciso do seu telefone com DDD (ex: 64999999999):`;
 
-      const startLeadFlow = () => {
-        setLeadFlow(true);
-        setLeadStep("askName");
-        addBotMessage("Perfeito — posso anotar seus dados para o agendamento. Qual seu *nome completo*?");
-      };
+      case 'telefone':
+        newData.telefone = userMessage;
+        setLeadCapture({ active: true, step: 'servico', data: newData });
+        return `Perfeito! 📞
 
-      const handleLeadInput = (text) => {
-        if (leadStep === "askName") {
-          setCollectedLead((p) => ({ ...p, nome: text }));
-          setLeadStep("askWhatsapp");
-          addBotMessage("Ótimo! Qual o seu WhatsApp para contato? (ex.: 64 9 9123-4567)");
-          return;
-        }
-        if (leadStep === "askWhatsapp") {
-          const phone = extractPhone(text) || text;
-          setCollectedLead((p) => ({ ...p, whatsapp: phone }));
-          setLeadStep("askService");
-          addBotMessage("Qual serviço deseja agendar? (ex.: Fisioterapia Ortopédica, Pilates Solo, Laser-terapia)");
-          return;
-        }
-        if (leadStep === "askService") {
-          setCollectedLead((p) => ({ ...p, servico: text }));
-          setLeadStep("askPeriod");
-          addBotMessage("Qual período prefere? (manhã / tarde / noite)");
-          return;
-        }
-        if (leadStep === "askPeriod") {
-          setCollectedLead((p) => ({ ...p, periodo: text }));
-          setLeadStep("confirm");
-          const summary = `Confirmando:\n\nNome: ${collectedLead.nome || "[nome]"}\nWhatsApp: ${collectedLead.whatsapp ||
-            "[whatsapp]"}\nServiço: ${collectedLead.servico || "[serviço]"}\nPeríodo: ${text}\n\nEstá tudo certo? Responda "sim" para confirmar ou "não" para corrigir.`;
-          addBotMessage(summary);
-          return;
-        }
-        if (leadStep === "confirm") {
-          const ok = /^(s|sim|ok|certo|ta|tá)/i.test(text.trim());
-          if (ok) {
-            submitLead();
-          } else {
-            // reinicia correção
-            setCollectedLead({ nome: "", whatsapp: "", servico: "", periodo: "" });
-            setLeadStep("askName");
-            addBotMessage("Certo — vamos recomeçar. Qual seu nome completo?");
-          }
-          return;
-        }
-      };
+Qual serviço gostaria de agendar?
 
-      const submitLead = async () => {
-        setIsSubmitting(true);
-        addBotMessage("Aguarde um instante — estou registrando sua solicitação e nossa recepção confirmará pelo WhatsApp em breve. 👍");
+• Fisioterapia Ortopédica
+• Fisioterapia Pélvica e Obstétrica  
+• Laser-terapia
+• Pilates Solo
+• Pilates Tradicional (Aparelhos)
+• Pilates Acrobático`;
 
-        const payload = {
-          nome: collectedLead.nome,
-          whatsapp: collectedLead.whatsapp,
-          servico: collectedLead.servico,
-          periodo: collectedLead.periodo,
-          origem: "chatbot_web",
-          timestamp: new Date().toISOString()
-        };
+      case 'servico':
+        newData.servico = userMessage;
+        setLeadCapture({ active: true, step: 'horario', data: newData });
+        return `Ótima escolha! 👍
 
-        try {
-          // tenta enviar para backend (se houver)
-          await fetch(LEADS_API_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-          });
-          addBotMessage("Lead registrada com sucesso! A recepção entrará em contato pelo WhatsApp para confirmar o horário e passar valores.");
-        } catch (err) {
-          console.warn("Erro ao enviar lead (backend pode não estar rodando):", err);
-          addBotMessage("Registro local efetuado no chat. Por favor, entre em contato pelo WhatsApp: (64) 99233-4004 para confirmar o agendamento.");
-        } finally {
-          setIsSubmitting(false);
-          setLeadFlow(false);
-          setLeadStep(null);
-          setCollectedLead({ nome: "", whatsapp: "", servico: "", periodo: "" });
-        }
-      };
+Em qual período prefere ser atendido(a)?
 
-      const generateBotResponse = (userMessage) => {
-        const message = userMessage.toLowerCase();
+🌅 **Manhã**
+• Segunda & Quarta: 07:00 - 11:00  
+• Terça & Quinta: 06:00 - 10:00
 
-        // Saudações
-        if (/(^|\s)(olá|oi|bom dia|boa tarde|boa noite)(\s|!|$)/i.test(message)) {
-          return "Olá! É um prazer falar com você! Posso fornecer informações sobre nossos serviços, horários ou ajudar com agendamentos.";
-        }
+🌆 **Tarde**  
+• Segunda a Quinta: 14:00 - 20:00`;
 
-        // Serviços específicos
-        for (const [key, service] of Object.entries(services)) {
-          if (message.includes(key) || message.includes(key.replace("-", " "))) {
-            return `📍 **${service.name}**\n\n${service.description}\n\n⏰ Duração: ${service.duration}\n💰 Valor: ${service.price}\n\nGostaria de agendar uma consulta ou precisa de mais informações?`;
-          }
-        }
+      case 'horario':
+        newData.horario = userMessage;
+        
+        // Enviar para planilha
+        sendToSheets('agendamento', newData);
+        sendToSheets('lead', newData);
+        
+        setLeadCapture({ active: false, step: 'nome', data: {} });
+        
+        return `🎉 **Solicitação registrada com sucesso!**
 
-        // Lista de serviços
-        if (message.includes("serviços") || message.includes("tratamentos") || message.includes("o que vocês fazem")) {
-          return `🏥 **Nossos Serviços:**\n\n• Fisioterapia Ortopédica\n• Fisioterapia Pélvica e Obstétrica\n• Laser-terapia\n• Pilates Solo\n• Pilates Tradicional\n• Pilates Acrobático\n\nSobre qual serviço gostaria de saber mais?`;
-        }
+✅ **Nome:** ${newData.nome}
+✅ **Telefone:** ${newData.telefone}  
+✅ **Serviço:** ${newData.servico}
+✅ **Período:** ${newData.horario}
 
-        // Agendamento (inicia leadFlow)
-        if (message.includes("agendar") || message.includes("marcar") || message.includes("consulta") || message.includes("horário")) {
-          startLeadFlow();
-          return null; // startLeadFlow já adiciona a mensagem de pergunta
-        }
+📱 **Nossa equipe entrará em contato via WhatsApp em até 2 horas úteis** para confirmar seu horário disponível!
 
-        // Valores/Preços
-        if (message.includes("valor") || message.includes("preço") || message.includes("quanto custa")) {
-          return "💰 **Valores**\n\nNossos valores variam conforme o tratamento. A recepção informa valores — quer que eu registre seu nome e WhatsApp para que entrem em contato?";
-        }
+💚 Obrigado pela confiança na Marayza Pires Pilates e Fisioterapia!`;
 
-        // Horário de funcionamento
-        if (message.includes("horário") || message.includes("funcionamento") || message.includes("aberto")) {
-          return "🕐 **Horário de Funcionamento**\n\n• Segunda & Quarta: 07:00 - 11:00 / 14:00 - 20:00\n• Terça & Quinta: 06:00 - 10:00 / 14:00 - 20:00";
-        }
+      default:
+        return "Houve um erro. Vamos começar novamente?";
+    }
+  };
 
-        // Localização
-        if (message.includes("endereço") || message.includes("localização") || message.includes("onde fica")) {
-          return "📍 **Localização**\n\nAv Geraldo Emídio Carneiro, Nº 1 - Guanabara\nIpameri - Goiás\nCEP: 75780-000\n\nCoordenadas: 17°43'16.7\"S 48°09'40.0\"W";
-        }
+  const findServiceInfo = (message) => {
+    const lowerMessage = message.toLowerCase();
+    
+    // Mapeamento de termos para encontrar serviços
+    const serviceMap = {
+      'ortopedica': 'fisioterapia-ortopedica',
+      'ortopédica': 'fisioterapia-ortopedica', 
+      'coluna': 'fisioterapia-ortopedica',
+      'ombro': 'fisioterapia-ortopedica',
+      'joelho': 'fisioterapia-ortopedica',
+      'lombar': 'fisioterapia-ortopedica',
+      'tendinite': 'fisioterapia-ortopedica',
+      'lesão': 'fisioterapia-ortopedica',
+      'lesao': 'fisioterapia-ortopedica',
+      'pelvica': 'fisioterapia-pelvica-obstetrica',
+      'pélvica': 'fisioterapia-pelvica-obstetrica',
+      'obstetrica': 'fisioterapia-pelvica-obstetrica',
+      'obstétrica': 'fisioterapia-pelvica-obstetrica',
+      'gestante': 'fisioterapia-pelvica-obstetrica',
+      'gravidez': 'fisioterapia-pelvica-obstetrica',
+      'parto': 'fisioterapia-pelvica-obstetrica',
+      'incontinencia': 'fisioterapia-pelvica-obstetrica',
+      'incontinência': 'fisioterapia-pelvica-obstetrica',
+      'laser': 'laser-terapia',
+      'solo': 'pilates-solo',
+      'tradicional': 'pilates-tradicional',
+      'aparelhos': 'pilates-tradicional',
+      'reformer': 'pilates-tradicional',
+      'cadillac': 'pilates-tradicional',
+      'acrobatico': 'pilates-acrobatico',
+      'acrobático': 'pilates-acrobatico'
+    };
 
-        // Despedida
-        if (/(tchau|obrigad[oa])/i.test(message)) {
-          return "Foi um prazer ajudá-lo(a)! 😊 Estamos à disposição. Para emergências, ligue: (64) 99233-4004.";
-        }
+    for (const [term, serviceId] of Object.entries(serviceMap)) {
+      if (lowerMessage.includes(term)) {
+        return SERVICES.find(s => s.id === serviceId);
+      }
+    }
+    
+    return null;
+  };
 
-        // Default
-        return "Entendi! Posso ajudar com:\n• Informações sobre serviços\n• Agendamentos (posso coletar nome e WhatsApp)\n• Horários\n• Localização\n\nOu você pode chamar diretamente no WhatsApp: (64) 99233-4004\n\nComo posso ajudar?";
-      };
-
-      const handleSendMessage = () => {
-        if (!inputText.trim()) return;
-        const text = inputText.trim();
-        setMessages((prev) => [...prev, { id: prev.length + 1, text, isBot: false, timestamp: new Date() }]);
-        setInputText("");
-        setIsTyping(true);
-
-        setTimeout(() => {
-          if (leadFlow) {
-            handleLeadInput(text);
-            setIsTyping(false);
-            return;
-          }
-
-          const botText = generateBotResponse(text);
-          if (botText) {
-            setMessages((prev) => [...prev, { id: prev.length + 1, text: botText, isBot: true, timestamp: new Date() }]);
-          }
-          setIsTyping(false);
-        }, 700);
-      };
-
-      const handleKeyPress = (e) => {
-        if (e.key === "Enter") handleSendMessage();
-      };
-
-      const formatTime = (date) => {
-        return new Date(date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-      };
-
-      const QuickButtons = () => {
-        const quickOptions = ["Ver serviços", "Agendar consulta", "Horário de funcionamento", "Localização"];
-        return (
-          <div className="flex flex-wrap gap-2 p-4 bg-gray-50">
-            {quickOptions.map((option, idx) => (
-              <button
-                key={idx}
-                onClick={() => {
-                  if (option === "Agendar consulta") {
-                    setTimeout(() => {
-                      setInputText("agendar");
-                      handleSendMessage();
-                    }, 100);
-                    return;
-                  }
-                  setInputText(option.toLowerCase());
-                  setTimeout(() => handleSendMessage(), 100);
-                }}
-                className="px-3 py-2 bg-blue-100 text-blue-700 rounded-full text-sm hover:bg-blue-200 transition-colors"
-              >
-                {option}
-              </button>
-            ))}
-          </div>
-        );
-      };
-
-      return (
-        <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-lg overflow-hidden w-full">
-          {/* Header */}
-          <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
-                <span className="text-2xl">🤖</span>
-              </div>
-              <div>
-                <h1 className="text-xl font-bold">Assistente Virtual</h1>
-                <p className="text-blue-100">Marayza Pires Pilates e Fisioterapia</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Info */}
-          <div className="bg-blue-50 p-4 border-b">
-            <div className="flex flex-wrap gap-6 text-sm text-blue-800">
-              <div className="flex items-center gap-2">
-                <span>⏰</span>
-                <span>Seg & Qua: 07h–11h / 14h–20h • Ter & Qui: 06h–10h / 14h–20h</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span>📞</span>
-                <span>(64) 99233-4004 (WhatsApp)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span>📅</span>
-                <span>Agendamento preferencial por WhatsApp</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Messages */}
-          <div className="h-96 overflow-y-auto p-4 space-y-4">
-            {messages.map((message) => (
-              <div key={message.id} className={`flex gap-3 ${message.isBot ? "justify-start" : "justify-end"}`}>
-                {message.isBot && (
-                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-white">🤖</span>
-                  </div>
-                )}
-
-                <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${message.isBot ? "bg-gray-100 text-gray-800" : "bg-blue-600 text-white"}`}>
-                  <div className="whitespace-pre-wrap">{message.text}</div>
-                  <div className={`text-xs mt-1 ${message.isBot ? "text-gray-500" : "text-blue-100"}`}>{formatTime(message.timestamp)}</div>
-                </div>
-
-                {!message.isBot && (
-                  <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-white">👤</span>
-                  </div>
-                )}
-              </div>
-            ))}
-
-            {isTyping && (
-              <div className="flex gap-3 justify-start">
-                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                  <span className="text-white">🤖</span>
-                </div>
-                <div className="bg-gray-100 px-4 py-2 rounded-lg">
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }}></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }}></div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Quick Buttons */}
-          <QuickButtons />
-
-          {/* Input */}
-          <div className="border-t p-4">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Digite sua mensagem..."
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={isSubmitting}
-              />
-              <button
-                onClick={handleSendMessage}
-                disabled={!inputText.trim() || isSubmitting}
-                className="px-6 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:bg-gray-400 transition-colors flex items-center gap-2"
-              >
-                <span>📩</span>
-                <span>Enviar</span>
-              </button>
-            </div>
-            <p className="text-xs text-gray-500 mt-2 text-center">Para emergências, ligue diretamente: (64) 99233-4004</p>
-          </div>
-        </div>
-      );
+  const generateBotResponse = (userMessage) => {
+    // Se está em processo de captura de lead
+    if (leadCapture.active) {
+      return processLeadCapture(userMessage);
     }
 
-    // render
-    const root = ReactDOM.createRoot(document.getElementById("root"));
-    root.render(React.createElement(ChatBot));
+    const message = userMessage.toLowerCase();
+    
+    // Saudações
+    if (message.includes('olá') || message.includes('oi') || message.includes('bom dia') || message.includes('boa tarde') || message.includes('boa noite')) {
+      return `Olá! É um prazer falar com você! 😊
+
+Como posso ajudá-lo(a) hoje? Posso fornecer informações sobre:
+
+• Nossos serviços de fisioterapia e pilates
+• Agendamentos  
+• Horários de funcionamento
+• Nossa localização em Ipameri-GO`;
+    }
+    
+    // Buscar serviço específico
+    const serviceInfo = findServiceInfo(message);
+    if (serviceInfo) {
+      let response = `📍 **${serviceInfo.nome}**
+
+${serviceInfo.descricao}
+
+⏰ **Duração:** ${serviceInfo.duracaoMin} minutos`;
+
+      if (serviceInfo.indicacoes) {
+        response += `\n\n✅ **Principais indicações:** ${serviceInfo.indicacoes.join(', ')}`;
+      }
+
+      if (serviceInfo.contraindicacoes) {
+        response += `\n\n⚠️ **Contraindicações:** ${serviceInfo.contraindicacoes.join(', ')}`;
+      }
+
+      if (serviceInfo.formatos) {
+        response += `\n\n📋 **Formatos disponíveis:** ${serviceInfo.formatos.join(', ')}`;
+      }
+
+      response += `\n\n💡 Gostaria de agendar uma avaliação ou precisa de mais informações?`;
+      
+      return response;
+    }
+    
+    // Lista completa de serviços
+    if (message.includes('serviços') || message.includes('servicos') || message.includes('tratamentos') || message.includes('o que vocês fazem')) {
+      return `🏥 **Nossos Serviços na Marayza Pires Pilates e Fisioterapia:**
+
+• **Fisioterapia Ortopédica** - Coluna, ombro, joelho, pós-cirúrgico
+• **Fisioterapia Pélvica e Obstétrica** - Gestantes e disfunções pélvicas  
+• **Laser-terapia** - Analgesia e cicatrização
+• **Pilates Solo** - Aulas em grupo ou personal
+• **Pilates Tradicional** - Com aparelhos (Reformer, Cadillac)
+• **Pilates Acrobático** - Combinação com elementos acrobáticos
+
+Sobre qual serviço gostaria de saber mais detalhes?`;
+    }
+    
+    // Agendamento - INICIA CAPTURA DE LEAD
+    if (message.includes('agendar') || message.includes('marcar') || message.includes('consulta') || message.includes('horário') || message.includes('horario')) {
+      setLeadCapture({ active: true, step: 'nome', data: {} });
+      return `📅 **Vamos agendar sua consulta!**
+
+Para começar, preciso de algumas informações básicas.
+
+Por favor, me diga seu **nome completo**:`;
+    }
+    
+    // Valores/Preços - FAQ sobre convênio
+    if (message.includes('valor') || message.includes('preço') || message.includes('preco') || message.includes('quanto custa') || message.includes('convenio') || message.includes('convênio')) {
+      return `💰 **Informações sobre Valores e Convênios**
+
+Trabalhamos principalmente **atendimento particular** com recibo para reembolso pelo seu convênio.
+
+📋 **Primeira avaliação:** Inclui avaliação completa + plano terapêutico (≈50min)
+
+📞 Para valores específicos e verificação do seu convênio:
+**WhatsApp:** ${CLINIC_INFO.whatsapp}
+**Telefone:** ${CLINIC_INFO.telefone}
+
+Posso coletar seus dados para nossa equipe entrar em contato! 😊`;
+    }
+    
+    // Horário de funcionamento
+    if (message.includes('funcionamento') || message.includes('aberto') || message.includes('horarios')) {
+      return `🕐 **Horários de Funcionamento**
+
+${CLINIC_INFO.horario}
+
+📍 Sempre prontos para cuidar da sua saúde em Ipameri-GO!
+
+Gostaria de agendar um horário?`;
+    }
+    
+    // Localização
+    if (message.includes('endereço') || message.includes('endereco') || message.includes('localização') || message.includes('localizacao') || message.includes('onde fica') || message.includes('ipameri')) {
+      return `📍 **${CLINIC_INFO.nome}**
+
+📮 **Endereço:** ${CLINIC_INFO.endereco}
+🗺️ **Coordenadas:** ${CLINIC_INFO.coordenadas}
+
+🚗 Temos facilidade de acesso e estacionamento próximo
+🏥 Localizado no centro de Ipameri-GO
+
+Precisa de orientações para chegar até aqui?`;
+    }
+
+    // FAQ sobre primeira consulta
+    if (message.includes('primeira') || message.includes('avaliação') || message.includes('avaliacao') || message.includes('como funciona')) {
+      const faqItem = FAQ.find(item => item.q.includes('avaliação'));
+      return `🩺 **Primeira Consulta**
+
+${faqItem.a}
+
+Durante a avaliação, você receberá:
+• Análise completa do seu caso
+• Plano de tratamento personalizado  
+• Orientações específicas
+• Cronograma de sessões
+
+Gostaria de agendar sua primeira avaliação?`;
+    }
+    
+    // Despedida
+    if (message.includes('tchau') || message.includes('obrigado') || message.includes('obrigada') || message.includes('até logo')) {
+      return `Foi um prazer ajudá-lo(a)! 😊 
+
+A Marayza Pires Pilates e Fisioterapia está sempre aqui quando precisar de cuidados com fisioterapia e pilates.
+
+💚 Tenha um ótimo dia e esperamos vê-lo(a) em breve em nossa clínica!`;
+    }
+    
+    // Resposta padrão
+    return `Entendi! Para melhor atendê-lo(a), posso ajudar com:
+
+• **Informações** sobre nossos serviços
+• **Agendamentos** de consultas  
+• **Horários** de funcionamento
+• **Localização** em Ipameri-GO
+• **Valores** e convênios
+
+📞 **Contato direto:**
+WhatsApp: ${CLINIC_INFO.whatsapp}
+Telefone: ${CLINIC_INFO.telefone}
+
+Como posso ajudar você hoje?`;
+  };
+
+  const handleSendMessage = () => {
+    if (!inputText.trim()) return;
+
+    const newUserMessage = {
+      id: messages.length + 1,
+      text: inputText,
+      isBot: false,
+      timestamp: new Date()
+    };
+
+    setMessages(prev => [...prev, newUserMessage]);
+    setInputText('');
+    setIsTyping(true);
+
+    // Simula delay de digitação do bot
+    setTimeout(() => {
+      const botResponseText = generateBotResponse(inputText);
+      const botResponse = {
+        id: messages.length + 2,
+        text: botResponseText,
+        isBot: true,
+        timestamp: new Date()
+      };
+      
+      // Enviar conversa para planilha
+      sendToSheets('conversation', {
+        userMessage: inputText,
+        botResponse: botResponseText
+      });
+      
+      setMessages(prev => [...prev, botResponse]);
+      setIsTyping(false);
+    }, 1500);
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      handleSendMessage();
+    }
+  };
+
+  const formatTime = (date) => {
+    return date.toLocaleTimeString('pt-BR', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+  };
+
+  const QuickButtons = () => {
+    if (leadCapture.active) return null; // Não mostrar botões durante captura
+
+    const quickOptions = [
+      'Ver todos os serviços',
+      'Agendar consulta',
+      'Horários de funcionamento',
+      'Nossa localização',
+      'Valores e convênios'
+    ];
+
+    return (
+      <div className="flex flex-wrap gap-2 p-4 bg-gray-50">
+        {quickOptions.map((option, index) => (
+          <button
+            key={index}
+            onClick={() => {
+              setInputText(option);
+              setTimeout(() => handleSendMessage(), 100);
+            }}
+            className="px-3 py-2 bg-blue-100 text-blue-700 rounded-full text-sm hover:bg-blue-200 transition-colors"
+          >
+            {option}
+          </button>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-lg overflow-hidden">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-green-600 to-blue-600 text-white p-4">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+            <Bot size={24} />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold">Assistente Virtual</h1>
+            <p className="text-green-100">Marayza Pires Pilates e Fisioterapia</p>
+          </div>
+          {leadCapture.active && (
+            <div className="ml-auto bg-green-500 px-3 py-1 rounded-full text-sm">
+              Agendamento em andamento
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Quick Info */}
+      <div className="bg-green-50 p-4 border-b">
+        <div className="flex flex-wrap gap-4 text-sm text-green-800">
+          <div className="flex items-center gap-2">
+            <Clock size={16} />
+            <span>Seg-Qui: 06h-20h</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Phone size={16} />
+            <span>{CLINIC_INFO.telefone}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <MapPin size={16} />
+            <span>Centro, Ipameri-GO</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Calendar size={16} />
+            <span>Agendamento via WhatsApp</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div className="h-96 overflow-y-auto p-4 space-y-4">
+        {messages.map((message) => (
+          <div
+            key={message.id}
+            className={`flex gap-3 ${message.isBot ? 'justify-start' : 'justify-end'}`}
+          >
+            {message.isBot && (
+              <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0">
+                <Bot size={16} className="text-white" />
+              </div>
+            )}
+            
+            <div
+              className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                message.isBot
+                  ? 'bg-gray-100 text-gray-800'
+                  : 'bg-blue-600 text-white'
+              }`}
+            >
+              <div className="whitespace-pre-wrap">{message.text}</div>
+              <div className={`text-xs mt-1 ${
+                message.isBot ? 'text-gray-500' : 'text-blue-100'
+              }`}>
+                {formatTime(message.timestamp)}
+              </div>
+            </div>
+            
+            {!message.isBot && (
+              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                <User size={16} className="text-white" />
+              </div>
+            )}
+          </div>
+        ))}
+        
+        {isTyping && (
+          <div className="flex gap-3 justify-start">
+            <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0">
+              <Bot size={16} className="text-white" />
+            </div>
+            <div className="bg-gray-100 px-4 py-2 rounded-lg">
+              <div className="flex space-x-1">
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+              </div>
+            </div>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Quick Buttons */}
+      <QuickButtons />
+
+      {/* Input */}
+      <div className="border-t p-4">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder={leadCapture.active ? "Digite sua resposta..." : "Digite sua mensagem..."}
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-green-500"
+          />
+          <button
+            onClick={handleSendMessage}
+            disabled={!inputText.trim()}
+            className="px-6 py-2 bg-green-600 text-white rounded-full hover:bg-green-700 disabled:bg-gray-400 transition-colors flex items-center gap-2"
+          >
+            <Send size={16} />
+            Enviar
+          </button>
+        </div>
+        <p className="text-xs text-gray-500 mt-2 text-center">
+          Para emergências: {CLINIC_INFO.whatsapp}
+        </p>
+      </div>
+    </div>
+  );
+};
+
+export default ChatBot;
   </script>
 </body>
 </html>
