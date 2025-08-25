@@ -1,11 +1,20 @@
+// src/components/chatbot.js
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Bot, User, Clock, Calendar, Phone } from 'lucide-react';
+
+/**
+ * Ajuste esta URL para o servidor onde o endpoint /api/leads ficará disponível.
+ * Em desenvolvimento padrão (server/index.js abaixo) use http://localhost:4000
+ * Em produção, substitua pela URL do seu backend.
+ */
+const LEADS_API_URL = process.env.REACT_APP_LEADS_API_URL || 'http://localhost:4000/api/leads';
 
 const ChatBot = () => {
   const [messages, setMessages] = useState([
     {
       id: 1,
-      text: "Olá! Bem-vindo(a) à Marayza Pires Pilates e Fisioterapia! 😊 Como podemos ajudá-lo(a) hoje?",
+      text:
+        "Olá! Bem-vindo(a) à Marayza Pires Pilates e Fisioterapia! 😊 Como podemos ajudá-lo(a) hoje?\n\nObs: Valores são informados pela nossa equipe humana — posso anotar seus dados para que a recepção entre em contato?",
       isBot: true,
       timestamp: new Date()
     }
@@ -13,6 +22,17 @@ const ChatBot = () => {
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef(null);
+
+  // lead flow states
+  const [leadFlow, setLeadFlow] = useState(false);
+  const [leadStep, setLeadStep] = useState(null); // 'askName' | 'askWhatsapp' | 'askService' | 'askPeriod' | 'confirm'
+  const [collectedLead, setCollectedLead] = useState({
+    nome: '',
+    whatsapp: '',
+    serviço: '',
+    periodo: ''
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const services = {
     'fisioterapia ortopédica': {
@@ -53,67 +73,165 @@ const ChatBot = () => {
     }
   };
 
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  useEffect(scrollToBottom, [messages]);
+  // util: extrai número de telefone simples
+  const extractPhone = (text) => {
+    const match = text.match(/(\+?\d[\d\-\s\(\)]{6,}\d)/);
+    return match ? match[0].replace(/\s+/g, ' ').trim() : null;
+  };
+
+  const startLeadFlow = () => {
+    setLeadFlow(true);
+    setLeadStep('askName');
+    addBotMessage('Perfeito — posso anotar seus dados para o agendamento. Qual seu *nome completo*?');
+  };
+
+  const handleLeadInput = (text) => {
+    if (leadStep === 'askName') {
+      setCollectedLead(prev => ({ ...prev, nome: text }));
+      setLeadStep('askWhatsapp');
+      addBotMessage('Ótimo! Qual o seu WhatsApp para contato? (ex: 64 9 9xxxx-xxxx)');
+      return;
+    }
+    if (leadStep === 'askWhatsapp') {
+      const phone = extractPhone(text) || text;
+      setCollectedLead(prev => ({ ...prev, whatsapp: phone }));
+      setLeadStep('askService');
+      addBotMessage('Qual serviço deseja agendar? (ex: Fisioterapia Ortopédica, Pilates Solo, Laser-terapia)');
+      return;
+    }
+    if (leadStep === 'askService') {
+      setCollectedLead(prev => ({ ...prev, serviço: text }));
+      setLeadStep('askPeriod');
+      addBotMessage('Qual período prefere? (manhã / tarde / noite)');
+      return;
+    }
+    if (leadStep === 'askPeriod') {
+      setCollectedLead(prev => ({ ...prev, periodo: text }));
+      setLeadStep('confirm');
+      addBotMessage(`Confirmando:\n\nNome: ${collectedLead.nome || '[nome]'}\nWhatsApp: ${collectedLead.whatsapp || '[whatsapp]'}\nServiço: ${collectedLead.serviço || '[serviço]'}\nPeríodo: ${text}\n\nEstá tudo certo? (Responda "sim" para confirmar ou "não" para corrigir.)`);
+      return;
+    }
+    if (leadStep === 'confirm') {
+      const ok = text.toLowerCase().includes('sim') || text.toLowerCase().includes('ta') || text.toLowerCase().includes('ok');
+      if (ok) {
+        submitLead();
+      } else {
+        // reiniciar fluxo de correção — vamos pedir qual campo quer corrigir
+        setLeadStep('askName');
+        setCollectedLead({ nome: '', whatsapp: '', serviço: '', periodo: '' });
+        addBotMessage('Certo — vamos recomeçar. Qual seu nome completo?');
+      }
+      return;
+    }
+  };
+
+  const submitLead = async () => {
+    setIsSubmitting(true);
+    addBotMessage('Aguarde um instante — estou registrando sua solicitação e nossa equipe confirmará pelo WhatsApp em breve. 👍');
+    try {
+      const payload = {
+        nome: collectedLead.nome,
+        whatsapp: collectedLead.whatsapp,
+        servico: collectedLead.serviço,
+        periodo: collectedLead.periodo,
+        origem: 'chatbot_web',
+        timestamp: new Date().toISOString()
+      };
+
+      await fetch(LEADS_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      addBotMessage('Lead registrada com sucesso! A recepção entrará em contato pelo WhatsApp para confirmar o horário e passar valores.');
+      // reset flow
+      setLeadFlow(false);
+      setLeadStep(null);
+      setCollectedLead({ nome: '', whatsapp: '', serviço: '', periodo: '' });
+    } catch (err) {
+      console.error('Erro ao enviar lead:', err);
+      addBotMessage('Desculpe, houve um problema ao registrar sua solicitação. Por favor, salve o número da clínica e nos chame no WhatsApp: (64) 99233-4004');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const addBotMessage = (text) => {
+    setMessages(prev => [...prev, {
+      id: prev.length + 1,
+      text,
+      isBot: true,
+      timestamp: new Date()
+    }]);
+  };
 
   const generateBotResponse = (userMessage) => {
     const message = userMessage.toLowerCase();
-    
+
     // Saudações
     if (message.includes('olá') || message.includes('oi') || message.includes('bom dia') || message.includes('boa tarde')) {
-      return "Olá! É um prazer falar com você! Como posso ajudá-lo(a) hoje? Posso fornecer informações sobre nossos serviços, horários ou ajudar com agendamentos.";
+      return "Olá! É um prazer falar com você! Posso fornecer informações sobre nossos serviços, horários ou ajudar com agendamentos.";
     }
-    
+
     // Serviços específicos
     for (const [key, service] of Object.entries(services)) {
       if (message.includes(key) || message.includes(key.replace('-', ''))) {
         return `📍 **${service.name}**\n\n${service.description}\n\n⏰ Duração: ${service.duration}\n💰 Valor: ${service.price}\n\nGostaria de agendar uma consulta ou precisa de mais informações?`;
       }
     }
-    
+
     // Lista de serviços
     if (message.includes('serviços') || message.includes('tratamentos') || message.includes('o que vocês fazem')) {
       return `🏥 **Nossos Serviços:**\n\n• Fisioterapia Ortopédica\n• Fisioterapia Pélvica e Obstétrica\n• Laser-terapia\n• Pilates Solo\n• Pilates Tradicional\n• Pilates Acrobático\n\nSobre qual serviço gostaria de saber mais?`;
     }
-    
-    // Agendamento
+
+    // Agendamento (inicia leadFlow)
     if (message.includes('agendar') || message.includes('marcar') || message.includes('consulta') || message.includes('horário')) {
-      return `📅 **Agendamento**\n\nFico feliz em ajudar com seu agendamento! \n\nPara agendar, você pode:\n• Ligar para (64) 99233-4004\n• WhatsApp: (64) 99233-4004\n• Ou me diga qual serviço deseja e em qual período prefere, que posso verificar a disponibilidade!\n\nQual serviço gostaria de agendar?`;
+      // inicia fluxo de coleta de dados
+      startLeadFlow();
+      return null; // já adicionamos mensagem de pergunta em startLeadFlow
     }
-    
+
     // Valores/Preços
     if (message.includes('valor') || message.includes('preço') || message.includes('quanto custa')) {
-      return `💰 **Valores**\n\nNossos valores variam de acordo com o tratamento escolhido. Para informações precisas sobre valores e possíveis convênios aceitos, por favor:\n\n📞 Ligue: (XX) XXXX-XXXX\n💬 WhatsApp: (XX) XXXXX-XXXX\n\nTeremos prazer em esclarecer todos os detalhes!`;
+      return `💰 **Valores**\n\nNossos valores são informados pela recepção. Posso anotar seu nome e WhatsApp para que a equipe confirme os valores e o agendamento?`;
     }
-    
+
     // Horário de funcionamento
     if (message.includes('horário') || message.includes('funcionamento') || message.includes('aberto')) {
-      return `🕐 **Horário de Funcionamento**\n\n• Segunda e Quarta de 07:00h às 11:00h e de 14:00h às 20:00h\n• Terça e Quinta de 06:00h às 10:00h e de 14:00h às 20:00h\n\n📍 Estamos sempre prontos para atendê-lo(a)!`;
+      return `🕐 **Horário de Funcionamento**\n\n• Segunda & Quarta: 07:00 - 11:00 / 14:00 - 20:00\n• Terça & Quinta: 06:00 - 10:00 / 14:00 - 20:00`;
     }
-    
+
     // Localização
     if (message.includes('endereço') || message.includes('localização') || message.includes('onde fica')) {
-      return `📍 **Localização**\n\nAv Geraldo Emídio Carneiro, Nº 1 - Centro\nIpameri - Goiás\nCEP: 75780-000\n\nPrecisa de mais orientações para chegar até aqui?`;
+      return `📍 **Localização**\n\nAv Geraldo Emídio Carneiro, Nº 1 - Guanabara\nIpameri - Goiás\nCEP: 75780-000\n\nCoordenadas: 17°43'16.7"S 48°09'40.0"W`;
     }
-    
+
     // Despedida
     if (message.includes('tchau') || message.includes('obrigado') || message.includes('obrigada')) {
-      return "Foi um prazer ajudá-lo(a)! 😊 Estamos sempre aqui quando precisar. Tenha um ótimo dia e esperamos vê-lo(a) em breve aqui no Studio!";
+      return "Foi um prazer ajudá-lo(a)! 😊 A recepção confirmará seu agendamento via WhatsApp. Até mais!";
     }
-    
+
     // Resposta padrão
-    return `Entendi! Como um robô, estou aprendendo e melhorando para aprimorar nossa experiência de atendimento. Para melhor atendê-lo(a), posso ajudar com:\n\n• Informações sobre nossos serviços\n• Agendamentos\n• Horários de funcionamento\n• Localização\n• Valores\n\nOu se preferir, pode entrar em contato diretamente:\n📞 (64) 99259-2411\n💬 WhatsApp: (64) 9XXXX-XXXX\n\nComo posso ajudar?`;
+    return `Entendi! Posso ajudar com:\n• Informações sobre serviços\n• Agendamentos (posso coletar nome e WhatsApp)\n• Horários\n• Localização\n\nOu você pode chamar diretamente no WhatsApp: (64) 99233-4004`;
   };
 
   const handleSendMessage = () => {
     if (!inputText.trim()) return;
 
+    const text = inputText.trim();
     const newUserMessage = {
       id: messages.length + 1,
-      text: inputText,
+      text,
       isBot: false,
       timestamp: new Date()
     };
@@ -122,18 +240,26 @@ const ChatBot = () => {
     setInputText('');
     setIsTyping(true);
 
-    // Simula delay de digitação do bot
     setTimeout(() => {
-      const botResponse = {
-        id: messages.length + 2,
-        text: generateBotResponse(inputText),
-        isBot: true,
-        timestamp: new Date()
-      };
-      
-      setMessages(prev => [...prev, botResponse]);
+      // se estamos no fluxo de lead, tratamos o input como parte do fluxo
+      if (leadFlow) {
+        handleLeadInput(text);
+        setIsTyping(false);
+        return;
+      }
+
+      const botText = generateBotResponse(text);
+      if (botText) {
+        setMessages(prev => [...prev, {
+          id: prev.length + 1,
+          text: botText,
+          isBot: true,
+          timestamp: new Date()
+        }]);
+      }
+      // se botText === null, geraBot já iniciou leadFlow e enviou mensagem
       setIsTyping(false);
-    }, 1500);
+    }, 900);
   };
 
   const handleKeyPress = (e) => {
@@ -143,9 +269,9 @@ const ChatBot = () => {
   };
 
   const formatTime = (date) => {
-    return date.toLocaleTimeString('pt-BR', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+    return date.toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit'
     });
   };
 
@@ -163,6 +289,15 @@ const ChatBot = () => {
           <button
             key={index}
             onClick={() => {
+              // se for Agendar, inicia fluxo de lead
+              if (option === 'Agendar consulta') {
+                // simula clique do usuário para iniciar o fluxo
+                setTimeout(() => {
+                  setInputText('agendar');
+                  handleSendMessage();
+                }, 100);
+                return;
+              }
               setInputText(option);
               setTimeout(() => handleSendMessage(), 100);
             }}
@@ -195,15 +330,15 @@ const ChatBot = () => {
         <div className="flex flex-wrap gap-6 text-sm text-blue-800">
           <div className="flex items-center gap-2">
             <Clock size={16} />
-            <span>Seg-Sex: 7h-19h | Sáb: 8h-12h</span>
+            <span>Seg & Qua: 07h–11h / 14h–20h • Ter & Qui: 06h–10h / 14h–20h</span>
           </div>
           <div className="flex items-center gap-2">
             <Phone size={16} />
-            <span>(XX) XXXX-XXXX</span>
+            <span>(64) 99233-4004 (WhatsApp)</span>
           </div>
           <div className="flex items-center gap-2">
             <Calendar size={16} />
-            <span>Agendamento online disponível</span>
+            <span>Agendamento preferencial por WhatsApp</span>
           </div>
         </div>
       </div>
@@ -220,7 +355,7 @@ const ChatBot = () => {
                 <Bot size={16} className="text-white" />
               </div>
             )}
-            
+
             <div
               className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
                 message.isBot
@@ -235,7 +370,7 @@ const ChatBot = () => {
                 {formatTime(message.timestamp)}
               </div>
             </div>
-            
+
             {!message.isBot && (
               <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center flex-shrink-0">
                 <User size={16} className="text-white" />
@@ -243,7 +378,7 @@ const ChatBot = () => {
             )}
           </div>
         ))}
-        
+
         {isTyping && (
           <div className="flex gap-3 justify-start">
             <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
@@ -274,10 +409,11 @@ const ChatBot = () => {
             onKeyPress={handleKeyPress}
             placeholder="Digite sua mensagem..."
             className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={isSubmitting}
           />
           <button
             onClick={handleSendMessage}
-            disabled={!inputText.trim()}
+            disabled={!inputText.trim() || isSubmitting}
             className="px-6 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:bg-gray-400 transition-colors flex items-center gap-2"
           >
             <Send size={16} />
