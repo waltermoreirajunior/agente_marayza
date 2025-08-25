@@ -81,7 +81,7 @@ const ChatBot = () => {
     
     // Agendamento
     if (message.includes('agendar') || message.includes('marcar') || message.includes('consulta') || message.includes('horário')) {
-      return `📅 **Agendamento**\n\nFico feliz em ajudar com seu agendamento! \n\nPara agendar, você pode:\n• Ligar para (XX) XXXX-XXXX\n• WhatsApp: (XX) XXXXX-XXXX\n• Ou me diga qual serviço deseja e em qual período prefere, que posso verificar a disponibilidade!\n\nQual serviço gostaria de agendar?`;
+      return `📅 **Agendamento**\n\nFico feliz em ajudar com seu agendamento! \n\nPara agendar, você pode:\n• Ligar para (64) 99233-4004\n• WhatsApp: (64) 99233-4004\n• Ou me diga qual serviço deseja e em qual período prefere, que posso verificar a disponibilidade!\n\nQual serviço gostaria de agendar?`;
     }
     
     // Valores/Preços
@@ -285,7 +285,7 @@ const ChatBot = () => {
           </button>
         </div>
         <p className="text-xs text-gray-500 mt-2 text-center">
-          Para emergências, ligue diretamente: (64) XXXX-XXXX
+          Para emergências, ligue diretamente: (64) 99233-4004
         </p>
       </div>
     </div>
