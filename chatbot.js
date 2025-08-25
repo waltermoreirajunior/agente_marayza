@@ -5,7 +5,7 @@ const ChatBot = () => {
   const [messages, setMessages] = useState([
     {
       id: 1,
-      text: "Olá! Bem-vindo(a) à nossa clínica de fisioterapia e pilates! 😊 Como posso ajudá-lo(a) hoje?",
+      text: "Olá! Bem-vindo(a) à Marayza Pires Pilates e Fisioterapia! 😊 Como podemos ajudá-lo(a) hoje?",
       isBot: true,
       timestamp: new Date()
     }
@@ -91,21 +91,21 @@ const ChatBot = () => {
     
     // Horário de funcionamento
     if (message.includes('horário') || message.includes('funcionamento') || message.includes('aberto')) {
-      return `🕐 **Horário de Funcionamento**\n\n• Segunda a Sexta: 7h às 19h\n• Sábados: 8h às 12h\n• Domingos: Fechado\n\n📍 Estamos sempre prontos para atendê-lo(a)!`;
+      return `🕐 **Horário de Funcionamento**\n\n• Segunda e Quarta de 07:00h às 11:00h e de 14:00h às 20:00h\n• Terça e Quinta de 06:00h às 10:00h e de 14:00h às 20:00h\n\n📍 Estamos sempre prontos para atendê-lo(a)!`;
     }
     
     // Localização
     if (message.includes('endereço') || message.includes('localização') || message.includes('onde fica')) {
-      return `📍 **Localização**\n\nRua Example, 123 - Bairro\nCidade - Estado\nCEP: 00000-000\n\n🚗 Temos estacionamento disponível\n🚌 Próximo ao transporte público\n\nPrecisa de mais orientações para chegar até aqui?`;
+      return `📍 **Localização**\n\nAv Geraldo Emídio Carneiro, Nº 1 - Centro\nIpameri - Goiás\nCEP: 75780-000\n\nPrecisa de mais orientações para chegar até aqui?`;
     }
     
     // Despedida
     if (message.includes('tchau') || message.includes('obrigado') || message.includes('obrigada')) {
-      return "Foi um prazer ajudá-lo(a)! 😊 Estamos sempre aqui quando precisar. Tenha um ótimo dia e esperamos vê-lo(a) em breve na nossa clínica!";
+      return "Foi um prazer ajudá-lo(a)! 😊 Estamos sempre aqui quando precisar. Tenha um ótimo dia e esperamos vê-lo(a) em breve aqui no Studio!";
     }
     
     // Resposta padrão
-    return `Entendi! Para melhor atendê-lo(a), posso ajudar com:\n\n• Informações sobre nossos serviços\n• Agendamentos\n• Horários de funcionamento\n• Localização\n• Valores\n\nOu se preferir, pode entrar em contato diretamente:\n📞 (XX) XXXX-XXXX\n💬 WhatsApp: (XX) XXXXX-XXXX\n\nComo posso ajudar?`;
+    return `Entendi! Como um robô, estou aprendendo e melhorando para aprimorar nossa experiência de atendimento. Para melhor atendê-lo(a), posso ajudar com:\n\n• Informações sobre nossos serviços\n• Agendamentos\n• Horários de funcionamento\n• Localização\n• Valores\n\nOu se preferir, pode entrar em contato diretamente:\n📞 (64) 99259-2411\n💬 WhatsApp: (64) 9XXXX-XXXX\n\nComo posso ajudar?`;
   };
 
   const handleSendMessage = () => {
@@ -185,7 +185,7 @@ const ChatBot = () => {
           </div>
           <div>
             <h1 className="text-xl font-bold">Assistente Virtual</h1>
-            <p className="text-blue-100">Clínica de Fisioterapia e Pilates</p>
+            <p className="text-blue-100">Marayza Pires Pilates e Fisioterapia</p>
           </div>
         </div>
       </div>
@@ -285,7 +285,7 @@ const ChatBot = () => {
           </button>
         </div>
         <p className="text-xs text-gray-500 mt-2 text-center">
-          Para emergências, ligue diretamente: (XX) XXXX-XXXX
+          Para emergências, ligue diretamente: (64) XXXX-XXXX
         </p>
       </div>
     </div>
